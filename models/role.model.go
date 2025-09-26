@@ -1,4 +1,3 @@
-
 package models
 
 import "gorm.io/gorm"
@@ -7,7 +6,7 @@ const roleTableName = "roles"
 
 type Role struct {
 	gorm.Model
-	Name        string       `json:"name" gorm:"not null;unique"`
+	Name        string       `json:"name" gorm:"not null"`
 	Description string       `json:"description"`
 	IsActive    bool         `json:"is_active" gorm:"default:true"`
 	SchoolID    uint         `json:"school_id" gorm:"not null"`
@@ -32,4 +31,3 @@ type RolePage struct {
 func (RoleDTO) TableName() string {
 	return roleTableName
 }
-
