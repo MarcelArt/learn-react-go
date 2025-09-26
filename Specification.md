@@ -2,7 +2,7 @@
 This is a Learning Management System (LMS) app that can be use for Elementary School to College
 
 ## Project Architecture
-On the root of the project is all of the backend written in Golang while inside the `web` directory is the frontend application written using React
+On the root of the project is all of the backend written in Golang while inside the `./web` directory is the frontend application written using React
 
 ### Backend
 The backend is written Golang with Fiber as the web framework, using Gorm as the ORM to communicate to the database, and is using PostgreSQL as the database.
