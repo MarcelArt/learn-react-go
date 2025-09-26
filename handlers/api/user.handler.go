@@ -289,3 +289,143 @@ func (h *UserHandler) Refresh(c *fiber.Ctx) error {
 		RefreshToken: refreshToken,
 	}, "Tokens refreshed successfully"))
 }
+
+// RegisterSchool registers a new user with school data
+// @Summary Register a new user with school
+// @Description Register a new user with school data
+// @Tags User
+// @Accept json
+// @Produce json
+// @Param input body models.RegisterSchoolInput true "School Registration"
+// @Success 201 {object} models.LoginResponse
+// @Failure 400 {string} string
+// @Failure 500 {string} string
+// @Router /user/register-school [post]
+func (h *UserHandler) RegisterSchool(c *fiber.Ctx) error {
+	var input models.RegisterSchoolInput
+	if err := c.BodyParser(&input); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(models.NewJSONResponse(err, ""))
+	}
+
+	if err := h.BaseCrudHandler.validator.Struct(input); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(models.NewJSONResponse(err, ""))
+	}
+
+	// Start transaction using database directly
+	db := h.repo.GetDB()
+	tx := db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Create school first
+	schoolRepo := repositories.NewSchoolRepo(tx)
+	schoolID, err := schoolRepo.Create(input.SchoolData)
+	if err != nil {
+		tx.Rollback()
+		return c.Status(utils.StatusCodeByError(err)).JSON(models.NewJSONResponse(err, "Failed to create school"))
+	}
+
+	// Set school ID for user
+	input.UserData.SchoolID = &schoolID
+
+	// Create user
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(input.UserData.Password), bcrypt.DefaultCost)
+	if err != nil {
+		tx.Rollback()
+		return c.Status(utils.StatusCodeByError(err)).JSON(models.NewJSONResponse(err, ""))
+	}
+	input.UserData.Password = string(hashedPassword)
+
+	userRepo := repositories.NewUserRepo(tx)
+	userID, err := userRepo.Create(input.UserData)
+	if err != nil {
+		tx.Rollback()
+		return c.Status(utils.StatusCodeByError(err)).JSON(models.NewJSONResponse(err, "Failed to create user"))
+	}
+
+	// Get created user to generate tokens
+	userDB, err := userRepo.GetByID(strconv.Itoa(int(userID)))
+	if err != nil {
+		tx.Rollback()
+		return c.Status(utils.StatusCodeByError(err)).JSON(models.NewJSONResponse(err, "Failed to retrieve created user"))
+	}
+
+	// Create default roles for the school
+	roleRepo := repositories.NewRoleRepo(tx)
+	defaultRoles := []struct {
+		name        string
+		description string
+	}{
+		{"admin", "School administrator with full access"},
+		{"teacher", "Teacher with course management access"},
+		{"student", "Student with course viewing access"},
+		{"parent", "Parent with child monitoring access"},
+	}
+
+	for _, roleData := range defaultRoles {
+		isActive := true
+		role := models.RoleDTO{
+			Name:        roleData.name,
+			Description: roleData.description,
+			SchoolID:    schoolID,
+			IsActive:    &isActive,
+		}
+		roleID, err := roleRepo.Create(role)
+		if err != nil {
+			tx.Rollback()
+			return c.Status(utils.StatusCodeByError(err)).JSON(models.NewJSONResponse(err, "Failed to create default roles"))
+		}
+
+		// Assign admin role to the registering user
+		if roleData.name == "admin" {
+			userRoleRepo := repositories.NewUserRoleRepo(tx)
+			userRole := models.UserRoleDTO{
+				UserID: userID,
+				RoleID: roleID,
+			}
+			_, err = userRoleRepo.Create(userRole)
+			if err != nil {
+				tx.Rollback()
+				return c.Status(utils.StatusCodeByError(err)).JSON(models.NewJSONResponse(err, "Failed to assign admin role"))
+			}
+		}
+	}
+
+	// Commit transaction
+	if err := tx.Commit().Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(models.NewJSONResponse(err, "Failed to complete registration"))
+	}
+
+	// Generate tokens for the new user
+	userDTO := models.UserDTO{
+		Username: userDB.Username,
+		Email:    userDB.Email,
+		DTO: models.DTO{
+			ID: userDB.ID,
+		},
+		SchoolID: userDB.SchoolID,
+	}
+	accessToken, refreshToken, err := utils.GenerateTokenPair(userDTO, false)
+	if err != nil {
+		return c.Status(utils.StatusCodeByError(err)).JSON(models.NewJSONResponse(err, ""))
+	}
+
+	// Create authorized device with the main database
+	_, err = h.adRepo.Create(models.AuthorizedDeviceDTO{
+		RefreshToken: refreshToken,
+		UserAgent:    c.Get("User-Agent"),
+		Ip:           c.IP(),
+		UserID:       userDB.ID,
+	})
+	if err != nil {
+		c.Status(utils.StatusCodeByError(err)).JSON(models.NewJSONResponse(err, ""))
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(models.NewJSONResponse(models.LoginResponse{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+	}, "School registration successful"))
+}

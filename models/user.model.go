@@ -16,18 +16,33 @@ type User struct {
 	Username   string    `json:"username" gorm:"unique;not null"`
 	Email      string    `json:"email" gorm:"unique;not null" validate:"email"`
 	Password   string    `json:"-" gorm:"not null" validate:"min=8"`
+	FirstName  string    `json:"first_name"`
+	LastName   string    `json:"last_name"`
+	Phone      string    `json:"phone"`
+	IsActive   bool      `json:"is_active" gorm:"default:true"`
+	SchoolID   *uint     `json:"school_id"`
+	School     *School   `json:"school" gorm:"foreignKey:SchoolID"`
+	Roles      []Role    `json:"roles" gorm:"many2many:user_roles;"`
 }
 
 type UserDTO struct {
 	DTO
-	Username string `json:"username" gorm:"unique;not null"`
-	Email    string `json:"email" gorm:"unique;not null" validate:"email"`
-	Password string `json:"password" gorm:"not null" validate:"min=8"`
+	Username  string  `json:"username" validate:"required,min=3,max=50"`
+	Email     string  `json:"email" validate:"required,email"`
+	Password  string  `json:"password" validate:"required,min=8"`
+	FirstName string  `json:"first_name" validate:"omitempty,max=50"`
+	LastName  string  `json:"last_name" validate:"omitempty,max=50"`
+	Phone     string  `json:"phone" validate:"omitempty,e164"`
+	IsActive  *bool   `json:"is_active"`
+	SchoolID  *uint   `json:"school_id"`
 }
 
 type UserPage struct {
-	Username string `json:"username" gorm:"unique;not null"`
-	Email    string `json:"email" gorm:"unique;not null" validate:"email"`
+	Username  string `json:"username"`
+	Email     string `json:"email"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+	IsActive  bool   `json:"is_active"`
 }
 
 type LoginInput struct {
@@ -45,16 +60,27 @@ type RefreshInput struct {
 	RefreshToken string `json:"refreshToken" validate:"jwt"`
 }
 
+type RegisterSchoolInput struct {
+	UserData   UserDTO   `json:"userData"`
+	SchoolData SchoolDTO `json:"schoolData"`
+}
+
 func (UserDTO) TableName() string {
 	return userTableName
 }
 
 func (m UserDTO) AccessClaims(exp int64) jwt.MapClaims {
-	return jwt.MapClaims{
+	claims := jwt.MapClaims{
 		"username": m.Username,
 		"userId":   m.ID,
 		"exp":      exp,
 	}
+
+	if m.SchoolID != nil {
+		claims["schoolId"] = *m.SchoolID
+	}
+
+	return claims
 }
 
 func (m UserDTO) RefreshClaims(isRemember bool) jwt.MapClaims {
@@ -62,9 +88,16 @@ func (m UserDTO) RefreshClaims(isRemember bool) jwt.MapClaims {
 	if isRemember {
 		expireAt = time.Now().Add(enums.Month)
 	}
-	return jwt.MapClaims{
+
+	claims := jwt.MapClaims{
 		"userId":     m.ID,
 		"isRemember": isRemember,
 		"exp":        expireAt.Unix(),
 	}
+
+	if m.SchoolID != nil {
+		claims["schoolId"] = *m.SchoolID
+	}
+
+	return claims
 }

@@ -43,9 +43,6 @@ func SetupRoutes(app *fiber.App) {
 		Expiration: 30 * time.Second,
 	}))
 
-	app.Static("/*", "./web/dist")
-	app.Static("/assets", "./web/dist/assets")
-
 	if config.Env.ServerENV != "prod" {
 		app.Get("/swagger/*", swagger.HandlerDefault)     // default
 		app.Get("/swagger/*", swagger.New(swagger.Config{ // custom
@@ -60,5 +57,14 @@ func SetupRoutes(app *fiber.App) {
 
 	api := app.Group("/api")
 	api_routes.SetupUserRoutes(api, authMiddleware)
+	api_routes.SetupSchoolRoutes(api, authMiddleware)
+	api_routes.SetupRoleRoutes(api, authMiddleware)
+	api_routes.SetupPermissionRoutes(api, authMiddleware)
+	api_routes.SetupUserRoleRoutes(api, authMiddleware)
+	api_routes.SetupRolePermissionRoutes(api, authMiddleware)
 	api_routes.SetupAuthorizedDeviceRoutes(api, authMiddleware)
+
+	// Static file serving should be last
+	app.Static("/*", "./web/dist")
+	app.Static("/assets", "./web/dist/assets")
 }

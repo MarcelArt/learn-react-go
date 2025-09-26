@@ -6,3 +6,9 @@ go: swag
 
 dev: swag
 	@air
+
+migrate-up:
+	@go run main.go migrate up
+
+migrate-down:
+	@go run main.go migrate down
