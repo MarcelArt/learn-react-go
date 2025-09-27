@@ -56,7 +56,7 @@ export function UserList({ schoolId }: UserListProps) {
     error,
   } = useQuery<PaginatedResponse<User>>({
     queryKey: ['users', page, schoolId],
-    queryFn: () => userApi.getUsers({ page, size: 10 }),
+    queryFn: () => userApi.getUsers({ page: page - 1, size: 10 }),
     enabled: !!schoolId,
   });
 
