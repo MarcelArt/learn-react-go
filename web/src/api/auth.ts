@@ -50,6 +50,7 @@ api.interceptors.response.use(
       } catch (refreshError) {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
+        // Use window.location as fallback since we can't access React Router here
         window.location.href = '/login';
         return Promise.reject(refreshError);
       }

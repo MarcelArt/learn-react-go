@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
+import { useNavigate } from '@tanstack/react-router';
 import { authApi } from '@/api/auth';
 import type { LoginInput, RegisterSchoolInput, LoginResponse } from '@/types/auth';
 
@@ -9,6 +10,7 @@ interface AuthContextType {
   logout: () => void;
   isAuthenticated: boolean;
   isLoading: boolean;
+  setNavigationCallback: (callback: () => void) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,6 +30,7 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const navigationCallbackRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     // Check if user is authenticated on app load
@@ -39,12 +42,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setIsLoading(false);
   }, []);
 
+  const setNavigationCallback = useCallback((callback: () => void) => {
+    navigationCallbackRef.current = callback;
+  }, []);
+
+  const triggerNavigation = useCallback(() => {
+    if (navigationCallbackRef.current) {
+      navigationCallbackRef.current();
+    }
+  }, []);
+
   const login = async (data: LoginInput) => {
     try {
       const response: LoginResponse = await authApi.login(data);
       localStorage.setItem('accessToken', response.accessToken);
       localStorage.setItem('refreshToken', response.refreshToken);
       setUser({ isAuthenticated: true });
+
+      // Trigger navigation after successful login
+      setTimeout(triggerNavigation, 0); // Use setTimeout to avoid state updates during render
     } catch (error) {
       throw error;
     }
@@ -56,6 +72,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       localStorage.setItem('accessToken', response.accessToken);
       localStorage.setItem('refreshToken', response.refreshToken);
       setUser({ isAuthenticated: true });
+
+      // Trigger navigation after successful registration
+      setTimeout(triggerNavigation, 0); // Use setTimeout to avoid state updates during render
     } catch (error) {
       throw error;
     }
@@ -73,7 +92,29 @@ export function AuthProvider({ children }: AuthProviderProps) {
     logout,
     isAuthenticated: !!user,
     isLoading,
+    setNavigationCallback,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+// Navigation wrapper component
+export function AuthNavigationWrapper({ children }: { children: React.ReactNode }) {
+  const { setNavigationCallback } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Set up navigation handler - this will only run once when dependencies are stable
+    const handleAuthSuccess = () => {
+      navigate({ to: '/dashboard' });
+    };
+
+    setNavigationCallback(handleAuthSuccess);
+  }, [navigate, setNavigationCallback]);
+
+  return <>{children}</>;
 }

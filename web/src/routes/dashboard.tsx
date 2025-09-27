@@ -1,8 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { Dashboard } from '../components/Dashboard'
+import { AuthGuard } from '../components/AuthGuard'
 
 export const Route = createFileRoute('/dashboard')({
-  component: DashboardComponent,
+  component: () => (
+    <AuthGuard>
+      <DashboardComponent />
+    </AuthGuard>
+  ),
 })
 
 function DashboardComponent() {
